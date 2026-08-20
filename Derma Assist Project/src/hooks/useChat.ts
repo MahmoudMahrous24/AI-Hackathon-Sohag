@@ -460,21 +460,13 @@ export function useChat() {
         }
 
         const asstMsgId = createId()
-        const defaultBookRef: BookReference = apiResult.book_reference || {
-          book_title: 'WHO Skin NTD & Clinical Dermatology Handbook',
-          section_title: 'Clinical Diagnosis & Management of Common Skin Diseases',
-          page_start: 14,
-          page_end: 15,
-          excerpt:
-            'Initial clinical triage focuses on lesion margin demarcation, erythema, scaling, and identifying potential systemic or dietary exacerbating triggers.',
-        }
 
         const assistantMessage: Message = {
           id: asstMsgId,
           role: 'assistant',
           type: apiResult.analysis ? 'analysis' : 'cds_guideline',
           text: apiResult.answer,
-          bookReference: defaultBookRef,
+          bookReference: apiResult.book_reference || undefined,
           analysis: apiResult.analysis || undefined,
           createdAt: new Date().toISOString(),
         }
@@ -489,7 +481,7 @@ export function useChat() {
             role: 'assistant',
             type: assistantMessage.type,
             text: assistantMessage.text,
-            book_reference: defaultBookRef,
+            book_reference: apiResult.book_reference || null,
             analysis: apiResult.analysis,
           })
         }
