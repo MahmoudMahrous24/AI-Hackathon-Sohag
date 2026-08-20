@@ -12,18 +12,7 @@ export function MessageBubble({ message, onOpenBookReference }: MessageBubblePro
   const { t } = useLanguage()
   const isUser = message.role === 'user'
 
-  const effectiveBookRef: BookReference | null =
-    message.bookReference ||
-    (!isUser
-      ? {
-          book_title: 'WHO Skin NTD & Clinical Dermatology Handbook',
-          section_title: 'Clinical Diagnosis & Common Cutaneous Syndromes',
-          page_start: 14,
-          page_end: 15,
-          excerpt:
-            'Initial clinical triage focuses on lesion margin demarcation, erythema, scaling, and identifying potential systemic or dietary exacerbating triggers.',
-        }
-      : null)
+  const effectiveBookRef: BookReference | null = message.bookReference || null
 
   return (
     <div className={`flex w-full items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}>

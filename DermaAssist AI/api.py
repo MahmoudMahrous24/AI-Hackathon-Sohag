@@ -354,7 +354,7 @@ def run_rag_pipeline(query_text: str, k: int = 5) -> QueryResponse:
         answer=res["answer"],
         citation=res.get("citation"),
         book_reference=book_ref,
-        refused=False,
+        refused=res.get("refused", False),
         formatted_output=res["formatted_output"],
     )
 

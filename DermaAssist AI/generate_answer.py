@@ -13,7 +13,7 @@ except ImportError:
 QUERY_PREFIX = "search_query: "
 DOCUMENT_NAME = "WHO Skin NTD & Clinical Dermatology Handbook"
 
-# Comprehensive Arabic-to-English Medical Keyword Ontology
+# Comprehensive Arabic-to-English Medical Keyword Ontology for Dermatology
 ARABIC_MEDICAL_MAP = {
     r"حبوب|حب الشباب|بثور|رؤوس سوداء|رؤوس بيضاء|مسام|دهون": "acne vulgaris pimples comedones inflammatory papules face back",
     r"سرطان|ميلانوما|خبيث|ورم|أخطر|اخطر|سوء|تغير شامة": "melanoma skin cancer pigmented lesion asymmetry irregular borders urgent referral",
@@ -26,27 +26,70 @@ ARABIC_MEDICAL_MAP = {
     r"ليشمانيا|حبة حلب|قرحة|ندبة": "cutaneous leishmaniasis skin ulcer papule oriental sore",
     r"دمامل|خراج|قوباء|عدوى بكتيرية": "bacterial skin infection impetigo boils folliculitis treponema",
     r"شمس|حروق شمس|واقي": "sun protection ultraviolet rays sunburn photoprotection",
+    r"تساقط الشعر|شعر|ثعلبة|صلع|قشرة الرأس": "hair loss alopecia areata androgenetic alopecia dandruff scalp psoriasis",
+    r"أظافر|اظافر|تغير لون الظفر|فطريات الاظافر": "onychomycosis nail fungus subungual hyperkeratosis nail dystrophy",
 }
 
-SYSTEM_PROMPT_DYNAMIC = """You are DermaAssist CDS, an expert clinical dermatology assistant.
-You synthesize official WHO Dermatology Guidelines with comprehensive evidence-based clinical knowledge.
+# Explicit non-dermatology patterns to immediately intercept
+OUT_OF_DOMAIN_PATTERNS = [
+    (r"أكلة|اكله|اكلة|طبخة|وصفة طعام|طريقة عمل|رز|لحمة|فراخ|بيتزا|كيك|شيف|مطعم|وجبة طعام|طبيخ|أطبخ|اكل", "الطهي والوصفات الغذائية"),
+    (r"كرة قدم|مباراة|دوري|أهداف|اهداف|لاعب|ميسي|رونالدو|ريال مدريد|برشلونة|رياضة كرة|كأس العالم|ماتش", "الأخبار الرياضية وكرة القدم"),
+    (r"أسنان|اسنان|ضرس|خلع ضرس|تسوس|تقويم اسنان|حشو ضرس|لثة|طبيب اسنان|ألم في اسناني|الم اسنان", "طب وجراحة الفم والأسنان"),
+    (r"قلب|ذبحة|شريان|صدرية|ضغط دم|سكر دم|عظام|كسر|مفصل|ركبة|غضروف|عيون|نظارة|رمد|أذن|انف وحنجرة|بواسير|مسالك بولية|كلى", "المجالات الطبية العامة الأخرى غير الجلدية"),
+    (r"برمجة|كود|بايثون|جافاسكريبت|سيارات|ميكانيكا|طقس|فيلم|مسلسل|اغنية|سياحة|سفر|تاريخ|سياسة|اقتصاد", "المواضيع العامة الخارجة عن الطب"),
+]
 
-CRITICAL INSTRUCTIONS:
-1. STRICT MODERN STANDARD ARABIC (فصحى طبية سلسة ونقية):
-   - Write the ENTIRE answer in 100% fluent, natural, professional Arabic.
-   - DO NOT include raw tags like "### Recommendation", "### Excerpt", or English chunks.
-2. STRUCTURED CLINICAL FORMAT:
-   - **التقييم السريري المحتمل / Clinical Assessment**
-   - **الأسباب والعوامل الشائعة / Causes & Triggers**
-   - **إرشادات العناية الموصى بها / Recommended Care**
-   - **التوجيه السريري ومتى تجب مراجعة الطبيب / Clinical Guidance**
-3. If the user question is in English, write the entire response in clean clinical English.
+DERMATOLOGY_KEYWORDS = [
+    r"جلد|بشرة|وجه|شعر|أظافر|اظافر|مسام|حبوب|بثور|رؤوس سوداء|رؤوس بيضاء|حكة|طفح|احمرار|تقشر|قشور",
+    r"إكزيما|اكزيما|صدفية|بهاق|جرب|تينيا|فطريات|فطر|سعفة|قوباء|دمامل|خراج|حرق|شمس|واقي|تصبغات|ندبات|كلف|شامات|زوائد جلدية",
+    r"قرحة جلدية|ليشمانيا|جذام|تسلخات|جفاف الجلد|حساسية الجلد|ارتيكاريا|شرى|ثعلبة|صلع|تساقط الشعر",
+    r"مرهم|كريم|لوشن|مضاد فطري|هيدروكورتيزون|مرطب|فازلين|ساليسيليك|ريتينول|بنزويل|نياسيناميد",
+    r"skin|dermatolog|acne|pimple|rash|eczema|psoriasis|tinea|fungal|scalp|hair|nail|melanoma|lesion|pruritus|erythema|blister|ulcer",
+]
+
+SYSTEM_PROMPT_DYNAMIC = """You are DermaAssist CDS, an AI clinical decision support assistant strictly specialized ONLY in Dermatology, Skin NTDs, Cutaneous Lesions, Hair, and Nails based on WHO guidelines.
+
+CRITICAL SCOPE & DOMAIN ENFORCEMENT RULES:
+1. STRICT DERMATOLOGY SPECIALIZATION:
+   - Your expertise is 100% restricted to Skin Conditions, Dermatology, Skin NTDs, Hair, and Nails.
+   - If the user asks about ANY non-dermatology topics (e.g., cooking recipes, food preparation, sports/football, dental/teeth problems, cardiology, internal medicine, orthopedics, general news, programming, or non-skin queries):
+     - DO NOT try to force a connection to skin health or invent dietary/exercise advice.
+     - DO NOT generate clinical assessment sections, causes, care steps, or recipes.
+     - DO NOT cite WHO book pages or handbook chapters.
+     - Reply with ONLY this concise and polite statement in Modern Standard Arabic:
+       "أهلاً بك. بصفتي مساعداً سريرياً متخصصاً في طب الأمراض الجلدية وصحة البشرة والشعر والأظافر، أود التوضيح أن استفسارك يخرج عن نطاق تخصصي الجلدي. يُرجى استشارة الطبيب أو المصدر المختص بمجال سؤالك للحصول على الإرشاد المناسب."
+     - Stop immediately.
+
+2. FOR LEGITIMATE DERMATOLOGY & SKIN QUERIES:
+   - Provide a direct, concise, empathetic, and evidence-based clinical answer grounded in WHO guidelines.
+   - Do NOT beat around the bush or ramble. Be direct and clear.
+   - Structure your response using:
+     • **التقييم السريري المحتمل**
+     • **الأسباب والعوامل الشائعة**
+     • **إرشادات العناية الموصى بها**
+     • **التوجيه السريري ومتى تجب مراجعة الطبيب**
+   - Write in 100% fluent, pure Modern Standard Arabic (فصحى طبية واضحة ومباشرة دون أي نصوص إنجليزية).
 """
 
 
 def is_arabic(text: str) -> bool:
     """Check if the text contains Arabic characters."""
     return bool(re.search(r"[\u0600-\u06FF]", text))
+
+
+def check_out_of_domain(query: str) -> tuple[bool, str]:
+    """Checks if query is clearly outside dermatology."""
+    q_lower = query.lower().strip()
+    
+    # Check if there is an explicit skin mention (e.g. "حساسية في الجلد بسبب أكلة معينة")
+    has_skin = any(re.search(dp, q_lower) for dp in DERMATOLOGY_KEYWORDS)
+    
+    for pattern, field_name in OUT_OF_DOMAIN_PATTERNS:
+        if re.search(pattern, q_lower):
+            if not has_skin:
+                return True, field_name
+                
+    return False, ""
 
 
 def map_arabic_query_to_medical_terms(query: str) -> str:
@@ -94,7 +137,6 @@ def translate_query_if_arabic(client, query: str) -> str:
     if not is_arabic(query):
         return query
 
-    # First check medical dictionary map
     mapped = map_arabic_query_to_medical_terms(query)
     if mapped != query:
         return mapped
@@ -200,7 +242,7 @@ class SmartLocalGenerator(GenerationBackend):
             return (
                 "**التقييم السريري الأولي واستجابة الجلد:**\n\n"
                 "• **الأسباب والآليات السريرية:**\n"
-                "  1. ظهور وتفاقم الأعراض الجلدية يرتبط بتفاعلات موضعية مناعية أو التهابية ناتجة عن انسداد المسام، اختلال الحاجز الواقي للجلد، أو التحسس للمهيجات البيئية والغذائية.\n"
+                "  1. ظهور وتفاقم الأعراض الجلدية يرتبط بتفاعلات موضعية مناعية أو التهابية ناتجة عن انسداد المسام، اختلال الحاجز الواقي للجلد، أو التحسس للمهيجات البيئية.\n"
                 "  2. تُظهر إرشادات منظمة الصحة العالمية أهمية الفحص المنهجي الدقيق للآفات وملاحظة الانتشار والاحمرار والقشور.\n\n"
                 "• **إرشادات العناية والخطوات الموصى بها:**\n"
                 "  1. استخدام غسول طبي معتدل ومرطب طبي خالي من العطور لدعم الحاجز الجلدي.\n"
@@ -213,7 +255,7 @@ class SmartLocalGenerator(GenerationBackend):
             return (
                 "**Clinical Assessment & Overview:**\n\n"
                 "• **Mechanisms & Triggers:**\n"
-                "  Cutaneous symptoms and inflammatory lesions commonly arise from follicle blockage, barrier impairment, or environmental and dietary triggers.\n\n"
+                "  Cutaneous symptoms and inflammatory lesions commonly arise from follicle blockage, barrier impairment, or environmental triggers.\n\n"
                 "• **Recommended Care Steps:**\n"
                 "  1. Maintain skin barrier integrity with gentle, fragrance-free cleansers and emollients.\n"
                 "  2. Avoid scratching or manipulating lesions to prevent scarring.\n"
@@ -264,8 +306,30 @@ def answer_question(
     target_tag: str | None = None,
 ) -> dict:
     arabic_input = is_arabic(query)
+    q_trimmed = query.strip()
 
-    # 1. Translate / Map Query for Vector Matching
+    # 1. Check Out-of-Domain Guardrail immediately
+    is_ood, ood_category = check_out_of_domain(q_trimmed)
+    if is_ood:
+        refusal_msg = (
+            f"أهلاً بك. بصفتي مساعداً سريرياً متخصصاً حصرياً في طب الأمراض الجلدية، وصحة البشرة والشعر والأظافر؛ أود التوضيح أن استفسارك يتعلق بمجال ({ood_category}) ويخرج عن نطاق تخصصي الطبي الجلدي.\n\n"
+            f"يُرجى استشارة الطبيب أو المصدر المختص في هذا المجال للحصول على التوجيه الصحيح والمباشر."
+            if arabic_input else
+            f"Hello. As a clinical AI assistant strictly specialized in Dermatology, Skin, Hair, and Nails; your query pertains to ({ood_category}) and falls outside my dermatological scope.\n\n"
+            f"Please consult the appropriate specialist or resource for proper guidance."
+        )
+        return {
+            "query": query,
+            "search_query": query,
+            "answer": refusal_msg,
+            "citation": None,
+            "book_reference": None,
+            "refused": True,
+            "formatted_output": refusal_msg,
+            "sources": [],
+        }
+
+    # 2. Translate / Map Query for Vector Matching
     if isinstance(generator, GeminiGenerator) and generator.client and arabic_input:
         search_query = translate_query_if_arabic(generator.client, query)
     else:
@@ -274,60 +338,17 @@ def answer_question(
     retrieved = retrieve(collection, embed_fn, search_query, k) if collection else []
     top_chunk = retrieved[0] if retrieved else None
 
-    # 2. Extract Accurate Book Reference Metadata from the Top Matching Chunk
-    if top_chunk and top_chunk.get("metadata"):
-        top_meta = top_chunk["metadata"]
-        section_title = top_meta.get("section_title") or top_meta.get("chapter_title") or "WHO Clinical Dermatology"
-        page_start = int(top_meta.get("page_start") or 99)
-        page_end = int(top_meta.get("page_end") or page_start)
-        raw_excerpt = top_chunk.get("document", "")[:350]
-        if len(top_chunk.get("document", "")) > 350:
-            raw_excerpt += "..."
-    else:
-        # Check rule-based mapping as fallback
-        if re.search(r"حب الشباب|بثور|رؤوس سوداء", query):
-            section_title = "Inflammatory disorders & Acne Vulgaris"
-            page_start = 99
-            page_end = 99
-            raw_excerpt = "Inflammation due to blockage of hair follicles and sebaceous glands (comedones). Common in adolescents and young adults. Inflamed papules and pustules on face, neck, chest."
-        elif re.search(r"سرطان|ميلانوما|اخطر|أخطر", query):
-            section_title = "Skin Cancers & Melanoma Urgent Referral"
-            page_start = 104
-            page_end = 104
-            raw_excerpt = "The most serious type of skin cancer. Skin cancer of pigment-producing cells. Affects skin anywhere in body. Warning signs: asymmetric, uneven border, various shades of black."
-        elif re.search(r"تينيا|تينة|فطريات|سعفة", query):
-            section_title = "Fungal Infections & Tinea Management"
-            page_start = 90
-            page_end = 91
-            raw_excerpt = "Superficial fungal infections caused by dermatophytes (Tinea corporis, Tinea capitis, Pityriasis versicolor). Managed with topical antifungal azoles (clotrimazole, miconazole)."
-        elif re.search(r"صدفية|لويحات", query):
-            section_title = "Algorithms: Plaques & Psoriasis Management"
-            page_start = 32
-            page_end = 32
-            raw_excerpt = "Plaques: raised, flat-topped areas of skin feeling thickened or rough with silver scales. Commonly affects elbows, knees, scalp."
-        elif re.search(r"إكزيما|اكزيما|حساسية|حكة", query):
-            section_title = "Inflammatory Disorders: Eczema & Dermatitis"
-            page_start = 100
-            page_end = 100
-            raw_excerpt = "Skin condition causing patches of itchiness and irritated skin. Patches of redness, swelling, cracks, and weeping. Support skin barrier with emollients."
-        else:
-            section_title = "Clinical Diagnosis & Management of Common Skin Diseases"
-            page_start = 14
-            page_end = 15
-            raw_excerpt = "Initial clinical triage focuses on systematic examination (Ask, Look, Feel) to assess lesion margin demarcation, erythema, scaling, and potential systemic triggers."
-
-    page_str = f"صفحة {page_start}" if arabic_input else f"Page {page_start}"
-    citation = f"{DOCUMENT_NAME} — {section_title} ({page_str})"
-
-    # 3. Grounded Synthesis with Full Medical Knowledge & WHO Guidelines
+    # 3. Grounded Synthesis with Gemini
     context_block = build_context_block(retrieved) if retrieved else "General WHO dermatological guidance and care protocols."
 
     user_prompt = (
         f"WHO HANDBOOK CONTEXT PASSAGES:\n\n{context_block}\n\n"
         f"---\n\n"
         f"PATIENT / CLINICAL QUESTION:\n{query}\n\n"
-        f"Provide a comprehensive, empathetic, and beautifully structured clinical answer in "
-        f"{'ARABIC (اللغة العربية الفصحى الطبية فقط دون أي نصوص أو اقتباسات إنجليزية)' if arabic_input else 'ENGLISH'}."
+        f"Instructions:\n"
+        f"- If the question is about dermatology/skin/hair/nails, provide a direct, concise, and structured clinical response in "
+        f"{'ARABIC (اللغة العربية الفصحى الطبية المباشرة دون أي نصوص أو اقتباسات إنجليزية)' if arabic_input else 'ENGLISH'}.\n"
+        f"- If the question is NOT about dermatology, do NOT make up connections to skin; politely state that you specialize only in dermatology."
     )
 
     raw_answer = generator.generate(
@@ -337,13 +358,86 @@ def answer_question(
         top_chunk=top_chunk,
     )
 
-    book_reference = {
-        "book_title": DOCUMENT_NAME,
-        "section_title": section_title,
-        "page_start": page_start,
-        "page_end": page_end,
-        "excerpt": raw_excerpt,
-    }
+    # Check if the generated answer is a refusal / out-of-domain response
+    is_refusal_response = (
+        "يخرج عن نطاق تخصصي" in raw_answer or
+        "متخصص حصرياً في طب الأمراض الجلدية" in raw_answer or
+        "outside my dermatological" in raw_answer.lower()
+    )
+
+    if is_refusal_response:
+        return {
+            "query": query,
+            "search_query": search_query,
+            "answer": raw_answer,
+            "citation": None,
+            "book_reference": None,
+            "refused": True,
+            "formatted_output": raw_answer,
+            "sources": [],
+        }
+
+    # 4. Extract Accurate Book Reference ONLY for Real Dermatology Answers
+    section_title = None
+    page_start = None
+    page_end = None
+    raw_excerpt = ""
+
+    if top_chunk and top_chunk.get("metadata"):
+        top_meta = top_chunk["metadata"]
+        section_title = top_meta.get("section_title") or top_meta.get("chapter_title") or "WHO Clinical Dermatology"
+        page_start = int(top_meta.get("page_start") or 14)
+        page_end = int(top_meta.get("page_end") or page_start)
+        raw_excerpt = top_chunk.get("document", "")[:350]
+        if len(top_chunk.get("document", "")) > 350:
+            raw_excerpt += "..."
+    else:
+        if re.search(r"حب الشباب|بثور|رؤوس سوداء", query):
+            section_title = "Inflammatory disorders & Acne Vulgaris"
+            page_start = 99
+            page_end = 99
+            raw_excerpt = "Inflammation due to blockage of hair follicles and sebaceous glands (comedones). Common in adolescents and young adults."
+        elif re.search(r"سرطان|ميلانوما|اخطر|أخطر", query):
+            section_title = "Skin Cancers & Melanoma Urgent Referral"
+            page_start = 104
+            page_end = 104
+            raw_excerpt = "The most serious type of skin cancer. Skin cancer of pigment-producing cells."
+        elif re.search(r"تينيا|تينة|فطريات|سعفة", query):
+            section_title = "Fungal Infections & Tinea Management"
+            page_start = 90
+            page_end = 91
+            raw_excerpt = "Superficial fungal infections caused by dermatophytes (Tinea corporis, Tinea capitis, Pityriasis versicolor)."
+        elif re.search(r"صدفية|لويحات", query):
+            section_title = "Algorithms: Plaques & Psoriasis Management"
+            page_start = 32
+            page_end = 32
+            raw_excerpt = "Plaques: raised, flat-topped areas of skin feeling thickened or rough with silver scales."
+        elif re.search(r"إكزيما|اكزيما|حساسية|حكة", query):
+            section_title = "Inflammatory Disorders: Eczema & Dermatitis"
+            page_start = 100
+            page_end = 100
+            raw_excerpt = "Skin condition causing patches of itchiness and irritated skin. Patches of redness, swelling, cracks, and weeping."
+        elif any(re.search(dp, query.lower()) for dp in DERMATOLOGY_KEYWORDS):
+            section_title = "Clinical Diagnosis & Management of Common Skin Diseases"
+            page_start = 14
+            page_end = 15
+            raw_excerpt = "Initial clinical triage focuses on systematic examination (Ask, Look, Feel) to assess lesion margin demarcation, erythema, and scaling."
+
+    if section_title and page_start:
+        page_str = f"صفحة {page_start}" if arabic_input else f"Page {page_start}"
+        citation = f"{DOCUMENT_NAME} — {section_title} ({page_str})"
+        book_reference = {
+            "book_title": DOCUMENT_NAME,
+            "section_title": section_title,
+            "page_start": page_start,
+            "page_end": page_end,
+            "excerpt": raw_excerpt,
+        }
+        formatted_output = f"{raw_answer}\n\n📖 **{citation}**"
+    else:
+        citation = None
+        book_reference = None
+        formatted_output = raw_answer
 
     return {
         "query": query,
@@ -352,6 +446,6 @@ def answer_question(
         "citation": citation,
         "book_reference": book_reference,
         "refused": False,
-        "formatted_output": f"{raw_answer}\n\n📖 **{citation}**",
+        "formatted_output": formatted_output,
         "sources": retrieved,
     }
